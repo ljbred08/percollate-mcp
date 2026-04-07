@@ -45,16 +45,7 @@ Reads a web page as Markdown and returns the content directly in conversation. R
 
 Cached files are stored in your OS temp directory (`percollate-mcp-cache/`).
 
-## Installation
-
-```bash
-git clone <repo-url> percollate-mcp
-cd percollate-mcp
-pnpm install
-pnpm run build
-```
-
-## Configuration
+## Quick Start
 
 Add to your MCP client config (e.g. Claude Desktop `claude_desktop_config.json`):
 
@@ -62,17 +53,18 @@ Add to your MCP client config (e.g. Claude Desktop `claude_desktop_config.json`)
 {
   "mcpServers": {
     "percollate": {
-      "command": "node",
-      "args": ["/absolute/path/to/percollate-mcp/dist/index.js"]
+      "command": "npx",
+      "args": ["-y", "percollate-mcp"]
     }
   }
 }
 ```
 
+No install needed — `npx` handles it automatically.
+
 ## Requirements
 
-- Node.js 14.17.0+
-- Percollate pulls in Puppeteer (for PDF generation), which downloads a Chromium binary on first use
+- Node.js 18+
 
 ## License
 
