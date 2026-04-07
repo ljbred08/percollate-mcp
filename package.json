@@ -1,0 +1,24 @@
+{
+  "name": "percollate-mcp",
+  "version": "1.0.0",
+  "description": "MCP server wrapping Percollate — convert web pages to PDF, EPUB, HTML, or Markdown",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "percollate-mcp": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.1",
+    "percollate": "^4.3.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.7.0"
+  },
+  "license": "MIT"
+}
