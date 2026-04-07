@@ -45,7 +45,7 @@ function urlToCachePath(url: string): string {
 
 function mapCommonArgs(args: Record<string, unknown>): Record<string, unknown> {
   const opts: Record<string, unknown> = {};
-  if (args.output) opts.output = args.output;
+  if (args.output) opts.output = path.resolve(args.output as string);
   if (args.title) opts.title = args.title;
   if (args.author) opts.author = args.author;
   if (args.css) opts.css = args.css;
@@ -61,6 +61,37 @@ function mapCommonArgs(args: Record<string, unknown>): Record<string, unknown> {
   if (args.inline === true) opts.inline = true;
   if (args.debug === true) opts.debug = true;
   return opts;
+}
+
+const EXT_MAP: Record<string, string> = { pdf: ".pdf", epub: ".epub", html: ".html", md: ".md" };
+
+/**
+ * Resolve the output path: absolute or relative (to cwd).
+ * If no output given, generate one in cwd based on title or URL.
+ * Ensures parent directories exist.
+ */
+async function resolveOutputPath(
+  opts: Record<string, unknown>,
+  urls: string[],
+  format: string
+): Promise<string> {
+  if (opts.output) {
+    const out = opts.output as string;
+    await fs.mkdir(path.dirname(out), { recursive: true });
+    return out;
+  }
+
+  // Auto-generate: use title if available, otherwise slug from first URL
+  const title = (opts.title as string) || new URL(urls[0]).hostname;
+  const slug = title
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, 60);
+  const outPath = path.resolve(`${slug || "percollate"}${EXT_MAP[format]}`);
+  await fs.mkdir(path.dirname(outPath), { recursive: true });
+  opts.output = outPath;
+  return outPath;
 }
 
 const server = new Server(
@@ -99,6 +130,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   }
 
   try {
+    const outputPath = await resolveOutputPath(opts, urls, format);
+
     suppressStdout();
     const result = await fn(urls, opts);
     restoreStdout();
@@ -110,7 +143,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       content: [
         {
           type: "text",
-          text: `Converted ${urls.length} page(s) to ${format.toUpperCase()}.\nArticles:\n${savedFiles}`,
+          text: `Converted ${urls.length} page(s) to ${format.toUpperCase()}.\nSaved to: ${outputPath}\nArticles:\n${savedFiles}`,
         },
       ],
     };
