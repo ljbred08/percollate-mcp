@@ -1,6 +1,6 @@
 {
   "name": "percollate-mcp",
-  "version": "1.0.6",
+  "version": "1.0.7",
   "description": "MCP server wrapping Percollate — convert web pages to PDF, EPUB, HTML, or Markdown",
   "type": "module",
   "main": "dist/index.js",

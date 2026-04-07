@@ -12,7 +12,7 @@ function downloadProperties() {
     },
     output: {
       type: "string" as const,
-      description: "Output file path (relative to cwd). Defaults to a generated name.",
+      description: "Output file path (absolute or relative). If it ends with / or has no extension, treated as a directory and a filename is auto-generated. Directories are created automatically.",
     },
     title: {
       type: "string" as const,

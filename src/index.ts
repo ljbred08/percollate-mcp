@@ -45,7 +45,7 @@ function urlToCachePath(url: string): string {
 
 function mapCommonArgs(args: Record<string, unknown>): Record<string, unknown> {
   const opts: Record<string, unknown> = {};
-  if (args.output) opts.output = path.resolve(args.output as string);
+  if (args.output) opts.output = args.output as string;
   if (args.title) opts.title = args.title;
   if (args.author) opts.author = args.author;
   if (args.css) opts.css = args.css;
@@ -65,33 +65,18 @@ function mapCommonArgs(args: Record<string, unknown>): Record<string, unknown> {
 
 const EXT_MAP: Record<string, string> = { pdf: ".pdf", epub: ".epub", html: ".html", md: ".md" };
 
-/**
- * Resolve the output path: absolute or relative (to cwd).
- * If no output given, generate one in cwd based on title or URL.
- * Ensures parent directories exist.
- */
-async function resolveOutputPath(
-  opts: Record<string, unknown>,
-  urls: string[],
-  format: string
-): Promise<string> {
-  if (opts.output) {
-    const out = opts.output as string;
-    await fs.mkdir(path.dirname(out), { recursive: true });
-    return out;
-  }
+/** Check if a raw output string represents a directory (not a file). */
+function isDirPath(raw: string): boolean {
+  return raw.endsWith("/") || raw.endsWith("\\") || !path.extname(path.resolve(raw));
+}
 
-  // Auto-generate: use title if available, otherwise slug from first URL
-  const title = (opts.title as string) || new URL(urls[0]).hostname;
-  const slug = title
+/** Slugify a title into a safe filename. */
+function slugify(text: string): string {
+  return text
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-|-$/g, "")
-    .slice(0, 60);
-  const outPath = path.resolve(`${slug || "percollate"}${EXT_MAP[format]}`);
-  await fs.mkdir(path.dirname(outPath), { recursive: true });
-  opts.output = outPath;
-  return outPath;
+    .slice(0, 60) || "percollate";
 }
 
 const server = new Server(
@@ -130,7 +115,44 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   }
 
   try {
-    const outputPath = await resolveOutputPath(opts, urls, format);
+    const ext = EXT_MAP[format];
+    let outputPath: string;
+
+    if (opts.output && !isDirPath(opts.output as string)) {
+      // Exact file path provided — use it directly
+      outputPath = path.resolve(opts.output as string);
+      await fs.mkdir(path.dirname(outputPath), { recursive: true });
+      opts.output = outputPath;
+    } else {
+      // Directory or no output — use temp file, rename after with page title
+      const targetDir = opts.output
+        ? path.resolve(opts.output as string)
+        : process.cwd();
+      const tempPath = path.join(os.tmpdir(), `percollate-${Date.now()}${ext}`);
+      opts.output = tempPath;
+
+      suppressStdout();
+      const result = await fn(urls, opts);
+      restoreStdout();
+
+      const title = result.items[0]?.title || new URL(urls[0]).hostname;
+      outputPath = path.join(targetDir, `${slugify(title)}${ext}`);
+      await fs.mkdir(targetDir, { recursive: true });
+      await fs.rename(tempPath, outputPath);
+
+      const savedFiles = result.items
+        .map((item: { title?: string }, i: number) => `- ${item.title || urls[i]}`)
+        .join("\n");
+
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Converted ${urls.length} page(s) to ${format.toUpperCase()}.\nSaved to: ${outputPath}\nArticles:\n${savedFiles}`,
+          },
+        ],
+      };
+    }
 
     suppressStdout();
     const result = await fn(urls, opts);
