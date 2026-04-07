@@ -1,5 +1,8 @@
 #!/usr/bin/env node
 
+// Workaround for TLS cert issues on Windows / corporate networks
+process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
+
 import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import os from "node:os";
@@ -11,8 +14,26 @@ import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
-import percollate from "percollate";
+import { configure as percollateConfigure, pdf, epub, html, md } from "percollate";
+
+const percollateFns = { pdf, epub, html, md } as const;
 import { tools } from "./tools.js";
+
+/**
+ * Percollate writes status output to stdout (file paths, progress)
+ * which corrupts the JSON-RPC stream MCP uses over stdout.
+ * Suppress stdout writes during percollate calls, redirect to stderr.
+ */
+const origStdoutWrite = process.stdout.write.bind(process.stdout);
+function suppressStdout() {
+  process.stdout.write = ((chunk: Buffer | string, ...args: unknown[]) => {
+    process.stderr.write(typeof chunk === "string" ? chunk : chunk.toString());
+    return true;
+  }) as typeof process.stdout.write;
+}
+function restoreStdout() {
+  process.stdout.write = origStdoutWrite;
+}
 
 // Cache directory in OS temp, created lazily
 const CACHE_DIR = path.join(os.tmpdir(), "percollate-mcp-cache");
@@ -67,17 +88,20 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   }
 
   const opts = mapCommonArgs(args as Record<string, unknown>);
-  percollate.configure();
+  if (name === "percollate_download_md" && !opts.markdownOptions) opts.markdownOptions = {};
+  percollateConfigure();
 
-  const format = name.replace("percollate_download_", "") as "pdf" | "epub" | "html" | "md";
-  const fn = percollate[format];
+  const format = name.replace("percollate_download_", "") as keyof typeof percollateFns;
+  const fn = percollateFns[format];
 
   if (!fn || typeof fn !== "function") {
     return { content: [{ type: "text", text: `Unknown format: ${format}` }], isError: true };
   }
 
   try {
+    suppressStdout();
     const result = await fn(urls, opts);
+    restoreStdout();
     const savedFiles = result.items
       .map((item: { title?: string }, i: number) => `- ${item.title || urls[i]}`)
       .join("\n");
@@ -91,6 +115,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       ],
     };
   } catch (err: unknown) {
+    restoreStdout();
     const message = err instanceof Error ? err.message : String(err);
     return {
       content: [{ type: "text", text: `Error: ${message}` }],
@@ -118,18 +143,22 @@ async function handleReadMd(args: Record<string, unknown>) {
   // Build options (no output — we set it to the cache path)
   const opts = mapCommonArgs(args);
   opts.output = cachePath;
+  if (!opts.markdownOptions) opts.markdownOptions = {};
 
-  percollate.configure();
+  percollateConfigure();
 
   try {
     // Ensure cache directory exists
     await fs.mkdir(CACHE_DIR, { recursive: true });
 
-    await percollate.md([url], opts);
+    suppressStdout();
+    await md([url], opts);
+    restoreStdout();
 
-    const md = await fs.readFile(cachePath, "utf-8");
-    return { content: [{ type: "text", text: md }] };
+    const content = await fs.readFile(cachePath, "utf-8");
+    return { content: [{ type: "text", text: content }] };
   } catch (err: unknown) {
+    restoreStdout();
     const message = err instanceof Error ? err.message : String(err);
     return {
       content: [{ type: "text", text: `Error fetching page: ${message}` }],

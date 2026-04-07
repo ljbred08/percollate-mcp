@@ -37,11 +37,9 @@ declare module "percollate" {
     options?: PercollateOptions
   ) => Promise<PercollateResult>;
 
-  function configure(): void;
-  const pdf: FormatFn;
-  const epub: FormatFn;
-  const html: FormatFn;
-  const md: FormatFn;
-
-  export { configure, pdf, epub, html, md };
+  export function configure(): void;
+  export const pdf: FormatFn;
+  export const epub: FormatFn;
+  export const html: FormatFn;
+  export const md: FormatFn;
 }
